@@ -98,6 +98,20 @@ export default async function ReportPage({
           </CardContent>
         </Card>
 
+        {/* Nhận xét chung */}
+        {normalized.summary && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Nhận xét chung</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-relaxed text-foreground/90">
+                {normalized.summary}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Scores */}
         <Card className="mt-6">
           <CardHeader>
@@ -118,15 +132,37 @@ export default async function ReportPage({
                     style={{ width: `${s.score}%` }}
                   />
                 </div>
-                {SIGNAL_DESCRIPTION_VI[s.key] && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {SIGNAL_DESCRIPTION_VI[s.key]}
+                {s.rationale ? (
+                  <p className="mt-1 text-sm text-foreground/80">
+                    {s.rationale}
                   </p>
+                ) : (
+                  SIGNAL_DESCRIPTION_VI[s.key] && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {SIGNAL_DESCRIPTION_VI[s.key]}
+                    </p>
+                  )
                 )}
               </div>
             ))}
           </CardContent>
         </Card>
+
+        {/* Gợi ý chăm sóc */}
+        {normalized.recommendations && normalized.recommendations.length > 0 && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Gợi ý chăm sóc</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="list-disc space-y-1.5 pl-5 text-sm text-foreground/90">
+                {normalized.recommendations.map((rec, i) => (
+                  <li key={i}>{rec}</li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Images */}
         <Card className="mt-6">

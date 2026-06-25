@@ -26,17 +26,18 @@ const AXES: {
   label: string;
   axis: SkinAxis;
   scale: number;
+  rationale: string;
 }[] = [
-  { key: "acne", label: "Mụn", axis: "severity", scale: 10 },
-  { key: "wrinkles", label: "Nếp nhăn", axis: "severity", scale: 10 },
-  { key: "pigmentation", label: "Sạm/nám", axis: "severity", scale: 10 },
-  { key: "redness", label: "Mẩn đỏ", axis: "severity", scale: 10 },
-  { key: "dryness", label: "Khô da", axis: "severity", scale: 10 },
-  { key: "oiliness", label: "Da dầu", axis: "severity", scale: 10 },
-  { key: "pores", label: "Lỗ chân lông to", axis: "severity", scale: 10 },
-  { key: "darkcircles", label: "Quầng thâm mắt", axis: "severity", scale: 10 },
-  { key: "hydration", label: "Độ ẩm", axis: "quality", scale: 10 },
-  { key: "evenness", label: "Đều màu da", axis: "quality", scale: 10 },
+  { key: "acne", label: "Mụn", axis: "severity", scale: 10, rationale: "[MOCK] Quan sát một vài nốt nhỏ ở vùng cằm và hai bên má, không có viêm rõ." },
+  { key: "wrinkles", label: "Nếp nhăn", axis: "severity", scale: 10, rationale: "[MOCK] Vùng trán và đuôi mắt có nếp nhăn mảnh, lộ rõ hơn khi biểu cảm." },
+  { key: "pigmentation", label: "Sạm/nám", axis: "severity", scale: 10, rationale: "[MOCK] Vài đốm sắc tố nhạt ở gò má, ranh giới không rõ." },
+  { key: "redness", label: "Mẩn đỏ", axis: "severity", scale: 10, rationale: "[MOCK] Ửng đỏ nhẹ quanh cánh mũi, phần còn lại của da khá đều." },
+  { key: "dryness", label: "Khô da", axis: "severity", scale: 10, rationale: "[MOCK] Bề mặt má hơi khô, không thấy bong tróc." },
+  { key: "oiliness", label: "Da dầu", axis: "severity", scale: 10, rationale: "[MOCK] Vùng chữ T (trán, mũi) hơi bóng dầu." },
+  { key: "pores", label: "Lỗ chân lông to", axis: "severity", scale: 10, rationale: "[MOCK] Lỗ chân lông to vừa ở hai bên cánh mũi." },
+  { key: "darkcircles", label: "Quầng thâm mắt", axis: "severity", scale: 10, rationale: "[MOCK] Vùng dưới mắt thâm nhẹ, hơi rõ ở bên trái." },
+  { key: "hydration", label: "Độ ẩm", axis: "quality", scale: 10, rationale: "[MOCK] Da nhìn chung đủ ẩm, bề mặt mịn ở vùng má." },
+  { key: "evenness", label: "Đều màu da", axis: "quality", scale: 10, rationale: "[MOCK] Tông da khá đồng đều, chênh lệch nhẹ giữa trán và má." },
 ];
 
 export class MockSkinAnalysisProvider implements SkinAnalysisProvider {
@@ -50,11 +51,19 @@ export class MockSkinAnalysisProvider implements SkinAnalysisProvider {
       axis: a.axis,
       value: seededValue(seed, i, a.scale),
       scale: a.scale,
+      rationale: a.rationale,
     }));
     return {
       provider: this.name,
       providerModel: "deterministic-v1",
       signals,
+      summary:
+        "[MOCK] Đây là dữ liệu mẫu, không phải phân tích ảnh thật. Da nhìn chung ở mức ổn, tập trung kiểm soát dầu vùng chữ T và dưỡng ẩm đều.",
+      recommendations: [
+        "[MOCK] Làm sạch dịu nhẹ 2 lần/ngày, tránh chà xát mạnh.",
+        "[MOCK] Dùng kem dưỡng ẩm phù hợp, ưu tiên kết cấu nhẹ cho vùng chữ T.",
+        "[MOCK] Thoa kem chống nắng mỗi sáng để hạn chế sạm nám.",
+      ],
       details: { note: "Mock provider — no external API call." },
     };
   }

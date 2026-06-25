@@ -32,6 +32,7 @@ export function normalize(
       key: s.key,
       label: s.label,
       score: Math.round(fraction * 100),
+      rationale: s.rationale,
     };
   });
 
@@ -40,5 +41,11 @@ export function normalize(
       ? Math.round(scores.reduce((a, s) => a + s.score, 0) / scores.length)
       : 0;
 
-  return { scores, overall, bandLabel: bandOf(overall) };
+  return {
+    scores,
+    overall,
+    bandLabel: bandOf(overall),
+    summary: raw.summary,
+    recommendations: raw.recommendations,
+  };
 }

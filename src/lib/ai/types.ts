@@ -10,6 +10,8 @@ export interface RawSkinSignal {
   axis: SkinAxis;
   value: number;
   scale: number; // value is in [0, scale]
+  // Per-axis observation from the image explaining the score (provider-generated).
+  rationale?: string;
 }
 
 export interface SkinAnalysisImage {
@@ -31,6 +33,8 @@ export interface RawSkinAnalysisResult {
   provider: string;
   providerModel?: string;
   signals: RawSkinSignal[];
+  summary?: string;
+  recommendations?: string[];
   details?: Record<string, unknown>;
 }
 
@@ -38,6 +42,7 @@ export interface NormalizedSkinScore {
   key: string;
   label: string;
   score: number; // 0..100, 100 = better
+  rationale?: string;
 }
 
 export type BandLabel = "low" | "medium" | "high";
@@ -46,6 +51,8 @@ export interface NormalizedSkinAnalysisResult {
   scores: NormalizedSkinScore[];
   overall: number;
   bandLabel: BandLabel;
+  summary?: string;
+  recommendations?: string[];
 }
 
 export interface SkinAnalysisProvider {

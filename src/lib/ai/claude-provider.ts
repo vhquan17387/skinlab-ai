@@ -12,7 +12,7 @@ const DEFAULT_MODEL = "claude-opus-4-7";
 
 const SYSTEM_PROMPT = `Bạn là một trợ lý phân tích hình ảnh da mặt cho mục đích tham khảo về chăm sóc da (KHÔNG phải chẩn đoán y khoa).
 Bạn nhận 3 ảnh khuôn mặt: chính diện, nghiêng trái, nghiêng phải.
-Hãy đánh giá các trục da sau và trả về điểm số dạng số nguyên theo thang đo quy định.
+Hãy đánh giá các trục da sau, trả về điểm số nguyên theo thang đo, VÀ với mỗi trục bắt buộc nêu "rationale".
 
 Quy ước trục (axis):
 - "severity": 0 = không có vấn đề, càng cao càng nghiêm trọng (thang 0-10).
@@ -21,6 +21,16 @@ Quy ước trục (axis):
 Các trục cần đánh giá (key): acne (severity), wrinkles (severity), pigmentation (severity),
 redness (severity), dryness (severity), oiliness (severity), pores (severity),
 darkcircles (severity), hydration (quality), evenness (quality).
+
+YÊU CẦU VỀ "rationale" (cho từng trục):
+- Viết bằng tiếng Việt, 1-2 câu, mô tả ĐIỀU THỰC SỰ QUAN SÁT ĐƯỢC trên ảnh dẫn tới điểm đó:
+  vị trí (vùng trán/má/cằm/mũi/quanh mắt), mức độ, biểu hiện cụ thể.
+- KHÔNG lặp lại định nghĩa trục (vd đừng viết "mức độ mụn trên da"); phải là quan sát riêng của ảnh này.
+- Nếu ảnh mờ/thiếu sáng/không thấy rõ vùng đó, hãy nói rõ trong rationale.
+
+Ngoài ra trả về:
+- "summary": nhận xét tổng quan 2-4 câu về tình trạng da nhìn thấy trên ảnh.
+- "recommendations": 3-5 gợi ý chăm sóc da cụ thể (mỗi gợi ý 1 câu), bám theo các quan sát ở trên.
 
 KHÔNG dùng ngôn từ chẩn đoán bệnh. Chỉ mô tả quan sát bề mặt da mang tính tham khảo.`;
 
@@ -40,12 +50,15 @@ const OUTPUT_SCHEMA = {
           axis: { type: "string", enum: ["severity", "quality"] },
           value: { type: "integer" },
           scale: { type: "integer" },
+          rationale: { type: "string" },
         },
-        required: ["key", "label", "axis", "value", "scale"],
+        required: ["key", "label", "axis", "value", "scale", "rationale"],
       },
     },
+    summary: { type: "string" },
+    recommendations: { type: "array", items: { type: "string" } },
   },
-  required: ["signals"],
+  required: ["signals", "summary", "recommendations"],
 } as const;
 
 function mediaType(contentType: string): "image/jpeg" | "image/png" | "image/webp" {
@@ -81,7 +94,7 @@ export class ClaudeSkinAnalysisProvider implements SkinAnalysisProvider {
     // untyped and cast at the call site.
     const params = {
       model: this.model,
-      max_tokens: 2048,
+      max_tokens: 4096,
       // Cache the (stable) system prompt.
       system: [
         {
@@ -144,13 +157,22 @@ export class ClaudeSkinAnalysisProvider implements SkinAnalysisProvider {
     const textBlock = response.content.find((b) => b.type === "text");
     const rawText = textBlock && "text" in textBlock ? textBlock.text : "{}";
 
-    let parsed: { signals?: RawSkinSignal[] };
+    let parsed: {
+      signals?: RawSkinSignal[];
+      summary?: string;
+      recommendations?: string[];
+    };
     try {
       parsed = JSON.parse(rawText);
     } catch {
       throw new Error("Claude provider returned non-JSON output");
     }
     const signals = Array.isArray(parsed.signals) ? parsed.signals : [];
+    const summary =
+      typeof parsed.summary === "string" ? parsed.summary : undefined;
+    const recommendations = Array.isArray(parsed.recommendations)
+      ? parsed.recommendations.filter((r): r is string => typeof r === "string")
+      : undefined;
 
     // Cache-usage fields may be absent from this SDK version's Usage type but
     // are present on the wire response.
@@ -164,6 +186,8 @@ export class ClaudeSkinAnalysisProvider implements SkinAnalysisProvider {
       provider: this.name,
       providerModel: this.model,
       signals,
+      summary,
+      recommendations,
       details: {
         usage: {
           input_tokens: usage.input_tokens,

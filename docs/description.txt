@@ -1,0 +1,502 @@
+
+All projects
+First project
+
+Claude Fable 5 is currently unavailable.
+Learn more(opens in new tab)
+
+
+
+Type / for skills
+
+
+Start a chat to keep conversations organized and re-use project knowledge.
+Instructions
+Build a Phase 0 MVP for “SkinAI Lab” using Next.js 15 App Router, TypeScript, Tailwind CSS, shadcn/ui, Supabase Postgres/Auth/Storage, Vercel-ready deployment, and Resend email. The app allows public users to submit basic personal info, skin concerns, consent checkboxes, and 3 face images: front, left, right. Store images in a private Supabase bucket. Save submissions to Postgres. Run a SkinAnalysisProvider abstraction. Start with MockSkinAnalysisProvider. Normalize skin scores into 0–100 where 100 is better. Generate a public report page using a hard-to-guess token. Do not use medical diagnosis wording. Build admin dashboard with Supabase Auth: - list submissions - search/filter by status - view details - view uploaded images via signed URLs - view raw and normalized AI result - update status - add internal notes - export CSV Use these statuses: new, processing, completed, need_retake, failed. Use these modules: - Landing page / - Submit page /submit - Report page /report/[token] - Admin login /admin/login - Admin submissions /admin/submissions - Admin detail /admin/submissions/[id] Implement DB schema for: leads, submissions, images, analysis_results, reports, admin_notes. Important: - No payment - No mobile app - No diagnosis - No prescription - No AI model training - Images must be private - Public report token must not expose submission id - Include disclaimer everywhere: “Kết quả phân tích chỉ mang tính tham khảo, không phải chẩn đoán y khoa và không thay thế việc thăm khám với bác sĩ da liễu.”
+
+Files
+1% of project capacity used
+
+Project Description
+476 lines
+
+text
+
+
+Project Description
+# PROMPT: Rebuild toàn bộ project SkinAI Lab — Phase 0 MVP
+ 
+Bạn là một senior full-stack engineer. Hãy build từ đầu một web app tên là **SkinAI Lab** dựa trên đặc tả dưới đây. Tuân thủ chính xác stack, kiến trúc, schema, và yêu cầu chức năng. Khi có lựa chọn về phong cách code, ưu tiên: TypeScript strict, server components mặc định, không over-engineer, không tạo abstraction thừa.
+ 
+---
+ 
+## 1. Mục tiêu sản phẩm
+ 
+SkinAI Lab là một MVP để người dùng cuối:
+1. Nộp 3 ảnh khuôn mặt (chính diện / nghiêng trái / nghiêng phải) cùng thông tin cá nhân và các skin concerns.
+2. Hệ thống chạy phân tích da bằng AI (Vision LLM).
+3. Người dùng nhận link xem báo cáo công khai (token-based, không lộ submission id).
+ 
+Đồng thời có khu vực **admin** để xem danh sách submissions, chi tiết ảnh, kết quả AI, đổi status và ghi note nội bộ.
+ 
+**Disclaimer (hiển thị xuyên suốt app, tiếng Việt):**
+> Kết quả phân tích chỉ mang tính tham khảo, không phải chẩn đoán y khoa và không thay thế việc thăm khám với bác sĩ da liễu.
+ 
+**Out of scope (Phase 0, không làm):** thanh toán, mobile app, chẩn đoán/kê đơn y tế, training model trên dữ liệu user, public URL cho ảnh.
+ 
+---
+ 
+## 2. Tech stack bắt buộc
+ 
+- **Framework:** Next.js 15 (App Router) + React 19 + TypeScript strict.
+- **Styling:** Tailwind CSS v3.4 + shadcn-style UI primitives (Card, Button, Input, Label, Badge, Select, Textarea) tự viết, dùng `class-variance-authority` + `clsx` + `tailwind-merge`. Icon set `lucide-react`.
+- **Validation:** `zod`.
+- **DB driver:** `pg` (raw SQL) cho local Postgres; `@supabase/supabase-js` + `@supabase/ssr` cho biến thể Supabase.
+- **AI SDK:** `@anthropic-ai/sdk` cho provider Claude.
+- **Image quality client-side:** `@mediapipe/tasks-vision` (face landmark).
+- **Email:** `resend` (optional, skip nếu không có API key).
+- **ID/token:** `nanoid`.
+- **Containerization:** Docker Compose cho Postgres 16 local.
+ 
+`package.json` script tối thiểu:
+```
+dev, build, start, lint, typecheck (tsc --noEmit),
+db:up (docker compose up -d postgres),
+db:down, db:setup (apply db/schema.sql), db:reset
+```
+ 
+---
+ 
+## 3. Kiến trúc backend swappable (RẤT QUAN TRỌNG)
+ 
+App KHÔNG được hard-code Supabase hay Postgres. Mọi truy cập DB / storage / auth đi qua 3 interface ở `src/lib/backend/types.ts`:
+ 
+| Interface     | Local impl                                       | Supabase impl                  |
+| ------------- | ------------------------------------------------ | ------------------------------ |
+| `DataStore`   | `postgres/data-store.ts` (raw SQL qua `pg`)      | `supabase/data-store.ts`       |
+| `BlobStore`   | `local/blob-store.ts` (filesystem + HMAC URL)    | `supabase/blob-store.ts`       |
+| `AuthBackend` | `local/auth.ts` (env credentials + HMAC cookie)  | `supabase/auth.ts`             |
+ 
+Chọn backend bằng env duy nhất:
+```env
+BACKEND=local       # default
+BACKEND=supabase
+```
+ 
+**Cấu trúc factory:** tách thành 3 file factory `data.ts`, `blob.ts`, `auth.ts` (và một `select.ts` xử lý switch). Lý do: middleware chạy trên Edge runtime nên chỉ được import `auth`, KHÔNG được kéo theo `pg`. Đừng gộp vào một factory chung.
+ 
+Thêm backend thứ 3 sau này = drop một folder mới dưới `src/lib/backend/<name>/`, implement 3 interface, mở rộng `select.ts`. Không sửa page/route.
+ 
+---
+ 
+## 4. Schema database (Postgres)
+ 
+File `db/schema.sql` (local) và `supabase/migrations/0001_init.sql` (Supabase, cùng shape + RLS + private bucket `skin-images`).
+ 
+### Enums
+```sql
+submission_status: 'new' | 'processing' | 'completed' | 'need_retake' | 'failed'
+image_kind:        'front' | 'left' | 'right'
+```
+ 
+### Tables (rút gọn, đầy đủ cột & index)
+ 
+**leads**
+- id uuid pk default gen_random_uuid()
+- full_name text not null, email text not null, phone text, age int, gender text
+- created_at, updated_at timestamptz default now()
+- index: `leads (lower(email))`
+ 
+**submissions**
+- id uuid pk, lead_id uuid fk→leads(id) on delete cascade
+- status submission_status default 'new'
+- skin_concerns text[] default '{}'
+- notes_from_user text
+- consent_terms / consent_data / consent_images boolean default false
+- user_agent text, ip_hash text
+- created_at, updated_at
+- indexes: status, created_at desc, lead_id
+ 
+**images**
+- id uuid pk, submission_id fk cascade, kind image_kind
+- storage_path text (opaque path — local treats as filesystem rel path, Supabase treats as object key)
+- mime_type, size_bytes, width, height
+- unique(submission_id, kind), index submission_id
+ 
+**analysis_results**
+- id uuid pk, submission_id fk cascade
+- provider text, provider_model text
+- raw jsonb, normalized jsonb, overall_score int
+- unique(submission_id, provider), index submission_id
+ 
+**reports**
+- id uuid pk, submission_id uuid unique fk cascade
+- token text unique (32 char nanoid)
+- published_at, revoked_at timestamptz
+- index token
+ 
+**admin_notes**
+- id uuid pk, submission_id fk cascade
+- author_id text, author_email text, body text not null
+- index (submission_id, created_at desc)
+ 
+### Trigger
+`set_updated_at()` plpgsql trigger gắn vào leads + submissions trước update.
+ 
+### Khác biệt Supabase
+- Bật RLS trên mọi table, **không định policy nào cho anon/authenticated** → mọi truy cập client trực tiếp đều bị từ chối; server dùng service role key.
+- Tạo private storage bucket `skin-images`.
+ 
+`scripts/db-setup.mjs`: đọc `DATABASE_URL`, đọc `db/schema.sql`, exec.
+ 
+`docker-compose.yml`: Postgres 16 trên `localhost:5432`, user/pass/db = `skinai/skinai/skinai`, volume `./.data/postgres` (gitignore).
+ 
+---
+ 
+## 5. Cấu trúc thư mục
+ 
+```
+db/schema.sql
+docker-compose.yml
+scripts/db-setup.mjs
+supabase/migrations/0001_init.sql
+ 
+src/
+  middleware.ts                 # delegate AuthBackend.middleware(req)
+  app/
+    layout.tsx                  # root layout + global disclaimer banner
+    page.tsx                    # landing /
+    globals.css                 # Tailwind
+    submit/
+      page.tsx
+      submit-form.tsx           # client component
+    report/[token]/page.tsx     # public report
+    admin/
+      layout.tsx                # admin shell + auth gate
+      logout-button.tsx
+      login/{page.tsx,login-form.tsx}
+      submissions/
+        page.tsx                # list + search + filter + CSV export link
+        [id]/
+          page.tsx              # detail view
+          status-editor.tsx
+          notes-panel.tsx
+    api/
+      auth/{login,logout}/route.ts
+      submit/route.ts           # public ingest pipeline
+      files/route.ts            # local BlobStore signed URL handler
+      admin/submissions/
+        export/route.ts         # CSV
+        [id]/{status,notes,image-url}/route.ts
+  components/
+    site-header.tsx
+    disclaimer.tsx
+    ui/{button,card,input,label,badge,select,textarea}.tsx
+  lib/
+    constants.ts
+    validation.ts
+    tokens.ts
+    utils.ts                    # cn() helper
+    backend/
+      types.ts                  # DataStore / BlobStore / AuthBackend / Backend
+      select.ts
+      data.ts blob.ts auth.ts   # factories (giữ import tách biệt)
+      index.ts
+      postgres/{pool,data-store}.ts
+      local/{auth,blob-store,sign}.ts
+      supabase/{clients,data-store,blob-store,auth}.ts
+    ai/
+      types.ts                  # provider-agnostic shapes
+      normalize.ts
+      mock-provider.ts
+      claude-provider.ts
+      index.ts                  # select theo SKIN_AI_PROVIDER
+    image-validators/
+      types.ts context.ts runner.ts index.ts
+      size.ts brightness.ts contrast.ts blur.ts glare.ts grayscale.ts face.ts
+    email/resend.ts
+  types/database.ts
+```
+ 
+---
+ 
+## 6. Pages & flows
+ 
+### Public
+ 
+**`/` (landing)** — giới thiệu ngắn + CTA sang `/submit`. Header dùng `site-header.tsx`, footer chứa `disclaimer.tsx`.
+ 
+**`/submit`** — form gồm:
+- Thông tin cá nhân: `full_name` (≥2), `email`, `phone` (tùy chọn, ≥8 nếu nhập), `age` (10–100), `gender` (female/male/other).
+- `skin_concerns`: multi-select, ≥1 mục, từ `SKIN_CONCERN_OPTIONS`:
+  - acne (Mụn), wrinkles (Nếp nhăn), pigmentation (Sạm/nám), redness (Mẩn đỏ), dryness (Khô da), oiliness (Da dầu), pores (Lỗ chân lông to), darkcircles (Quầng thâm mắt).
+- `notes_from_user` (≤2000).
+- 3 ảnh: front / left / right. Mỗi ảnh chạy `image-validators` phía client TRƯỚC khi upload — nếu fail, hiển thị message tiếng Việt cụ thể ("Ảnh quá mờ", "Không phát hiện khuôn mặt"...) và không submit.
+- 3 checkbox consent bắt buộc: `consent_terms`, `consent_data`, `consent_images` (zod `z.literal(true)`).
+- Submit → `POST /api/submit` (multipart): insert lead → submission → upload 3 ảnh vào `BlobStore` → insert image rows → set status `processing` → gọi `SkinAnalysisProvider.analyze` → normalize → insert analysis → tạo report token (nanoid 32) → set status `completed` → (optional) gửi email Resend → redirect tới `/report/<token>`.
+- Lưu `user_agent` từ header, lưu `ip_hash` = SHA-256(IP + `IP_HASH_PEPPER`). KHÔNG lưu raw IP.
+ 
+**`/report/[token]`** — public, key bằng token:
+- Tìm `reports.token`. Nếu không có hoặc `revoked_at IS NOT NULL` → 404.
+- Hiển thị: ảnh (qua signed URL TTL ngắn), `normalized.scores` (bar/list 0–100 + label), `overall` + `bandLabel`, disclaimer.
+- KHÔNG hiển thị submission id, không hiển thị raw provider output.
+ 
+### Admin
+ 
+**`/admin/login`** — form email + password → `POST /api/auth/login` → cookie session HttpOnly SameSite=Lax.
+ 
+**`/admin/submissions`** — bảng list:
+- Filter: status (dropdown), search box (matches name/email/phone qua `searchLeadIds`).
+- Phân trang `limit`/`offset`.
+- Link "Export CSV" → `/api/admin/submissions/export?status=...`.
+- Mỗi row link sang `/admin/submissions/[id]`.
+ 
+**`/admin/submissions/[id]`** — detail:
+- Thông tin lead + submission + consent.
+- 3 ảnh (signed URL TTL = `SIGNED_URL_TTL`).
+- Raw + normalized AI result.
+- `status-editor.tsx`: dropdown, gọi `PATCH /api/admin/submissions/[id]/status`.
+- `notes-panel.tsx`: list + add note, gọi `GET/POST /api/admin/submissions/[id]/notes`.
+- Link report public hiện tại.
+ 
+### API routes (tất cả validate input bằng zod)
+ 
+- `POST /api/auth/login` body `{email,password}` → `AuthBackend.signIn`.
+- `POST /api/auth/logout` → `AuthBackend.signOut`.
+- `POST /api/submit` multipart → pipeline mô tả ở `/submit`.
+- `GET /api/files?path=...&exp=...&sig=...` — **chỉ với BACKEND=local**. Verify HMAC-SHA256(`${path}|${exp}`, `LOCAL_STORAGE_SECRET`), check exp chưa quá hạn, đọc file từ `LOCAL_STORAGE_DIR`, refuse path nào resolve ra ngoài dir (chống `..` traversal). Trả về stream với content-type từ `.meta` sidecar.
+- `PATCH /api/admin/submissions/[id]/status` body `{status}` (zod enum).
+- `GET/POST /api/admin/submissions/[id]/notes`.
+- `GET /api/admin/submissions/[id]/image-url?kind=front|left|right` → `BlobStore.signedUrl`.
+- `GET /api/admin/submissions/export?status=...` → CSV (header: id, created_at, status, full_name, email, phone, age, gender, skin_concerns, overall_score, provider).
+ 
+Tất cả admin endpoints + admin pages được gate bởi `middleware.ts` (gọi `AuthBackend.middleware(req)`), trả về redirect `/admin/login` nếu chưa auth.
+ 
+---
+ 
+## 7. AI provider abstraction
+ 
+`src/lib/ai/types.ts`:
+```ts
+RawSkinSignal { key, label, axis: "severity"|"quality", value, scale }
+SkinAnalysisImage { storagePath, bytes: Uint8Array, contentType }
+SkinAnalysisInput { submissionId, images: { front, left, right } }
+RawSkinAnalysisResult { provider, providerModel?, signals[], details? }
+NormalizedSkinScore { key, label, score: 0..100 }
+NormalizedSkinAnalysisResult { scores[], overall: number, bandLabel: "low"|"medium"|"high" }
+SkinAnalysisProvider { name; analyze(input): Promise<RawSkinAnalysisResult> }
+```
+ 
+**Convention raw scores:**
+- `severity` axis: 0 = none, càng cao càng tệ.
+- `quality` axis: 0 = tệ, càng cao càng tốt.
+ 
+**Normalizer (`normalize.ts`):**
+- severity: `score = (1 - value/scale) * 100`
+- quality:  `score = value/scale * 100`
+- clamp 0..1, round.
+- overall = mean.
+- bandLabel: `>=75 high`, `>=50 medium`, else `low`.
+ 
+**Providers (chọn bằng `SKIN_AI_PROVIDER`):**
+ 
+- `mock` (default): sinh điểm deterministic từ hash của submissionId. Không gọi API. Trả `signals` cho ít nhất các trục: acne, wrinkles, pigmentation, redness, dryness, oiliness, pores, darkcircles (mix axis).
+ 
+- `claude`: dùng `@anthropic-ai/sdk`. Yêu cầu:
+  - Gửi cả 3 ảnh trong 1 lần `messages.create`.
+  - Dùng `output_config.format` kiểu `json_schema` để bắt buộc shape JSON trả về.
+  - Cache system prompt: `cache_control: { type: "ephemeral" }`.
+  - Model mặc định: `claude-opus-4-7`. Cho phép override `CLAUDE_MODEL` (`claude-sonnet-4-6` rẻ hơn ~2×, `claude-haiku-4-5` rẻ hơn ~5×).
+  - Ghi token usage (`input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`) vào `analysis_results.raw.details.usage`.
+ 
+Thêm provider mới = drop class implement `SkinAnalysisProvider` vào `src/lib/ai/`, thêm `case` trong `src/lib/ai/index.ts`. Không sửa pipeline.
+ 
+---
+ 
+## 8. Image quality validators (client-side, chạy trước upload)
+ 
+Đây là phần **gating chất lượng đầu vào**, mục tiêu lớn của project: garbage-in-garbage-out → từ chối ảnh kém trước khi tốn token VLM, và cho user message "chụp lại vì X" thay vì báo cáo sai.
+ 
+`src/lib/image-validators/`:
+ 
+- `types.ts` — `ValidationCode` enum (`size_too_small | blur_high | too_dark | too_bright | low_contrast | glare_high | no_face | face_too_small | wrong_angle | internal_error`); `ValidationResult = {ok:true} | {ok:false, code, message, metric?}`; `ImageContext { file, kind?, width, height, bitmap: ImageBitmap, analysisData: ImageData (downscale max 512px) }`; `Validator = (ctx) => ValidationResult | Promise<...>`.
+ 
+- `context.ts` — `createImageContext(file, kind?)`: tạo bitmap, downscale về ≤512px, trả `ImageContext`.
+ 
+- `runner.ts` — `runValidators(ctx, validators[])`: chạy tuần tự, dừng ở fail đầu tiên.
+ 
+- `index.ts` — export tier:
+  - **TIER1 (cheap pixel stats):** size, brightness, contrast, blur, glare.
+  - **TIER2 (model-based):** face (MediaPipe FaceLandmarker — presence, bbox coverage, pose).
+  - `DEFAULT_VALIDATORS = [...TIER1, ...TIER2]`.
+ 
+- Mỗi validator (`size.ts`, `brightness.ts`, `contrast.ts`, `blur.ts`, `glare.ts`, `face.ts`, `grayscale.ts`): trả về `ValidationResult` với threshold hợp lý. Message phải bằng tiếng Việt và actionable ("Ảnh quá tối, vui lòng chụp nơi đủ sáng").
+ 
+Trong `submit-form.tsx`: với mỗi ảnh chọn, chạy `DEFAULT_VALIDATORS`; nếu fail show message tiếng Việt + chặn submit cho đến khi cả 3 ảnh pass.
+ 
+---
+ 
+## 9. Constants (`src/lib/constants.ts`)
+ 
+```ts
+DISCLAIMER_TEXT (tiếng Việt như trên)
+SKIN_CONCERN_OPTIONS (8 items như trên)
+SUBMISSION_STATUSES + SubmissionStatus type
+STATUS_LABEL_VI: { new:"Mới", processing:"Đang phân tích", completed:"Hoàn tất", need_retake:"Cần chụp lại", failed:"Thất bại" }
+IMAGE_KINDS + ImageKind
+IMAGE_KIND_LABEL_VI: { front:"Chính diện", left:"Nghiêng trái", right:"Nghiêng phải" }
+SIGNED_URL_TTL = Number(process.env.SIGNED_URL_TTL || 600)
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+ACCEPTED_MIME = ["image/jpeg","image/png","image/webp"]
+```
+ 
+---
+ 
+## 10. Tokens & signing (`src/lib/tokens.ts`, `src/lib/backend/local/sign.ts`)
+ 
+- `newReportToken()` = `nanoid(32)` → ~190 bit entropy.
+- `signLocalUrl(path, ttlSeconds, secret)`: trả `?path&exp&sig`, `sig = hex(HMAC-SHA256(${path}|${exp}, secret))`. Dùng Web Crypto API để chạy được trên cả Node và Edge.
+- `verifyLocalUrl(path, exp, sig, secret)`: constant-time compare.
+ 
+---
+ 
+## 11. Local BlobStore chi tiết
+ 
+- File system root: `LOCAL_STORAGE_DIR` (default `.local-storage`, gitignore).
+- `put({path, bytes, contentType})`: mkdir -p, ghi file + ghi sidecar `<path>.meta` chứa `contentType`.
+- `signedUrl(path, ttl)`: trả `/api/files?...` với HMAC như trên.
+- `/api/files`: verify HMAC, đọc sidecar lấy content-type, stream file. **Chặn path traversal:** resolve absolute path, đảm bảo bắt đầu bằng resolve của `LOCAL_STORAGE_DIR`, nếu không trả 400.
+ 
+Cấu trúc lưu: `<LOCAL_STORAGE_DIR>/<submission-id>/{front,left,right}.<ext>` + `.meta`.
+ 
+---
+ 
+## 12. Local auth chi tiết
+ 
+- Một tài khoản admin duy nhất từ env `ADMIN_EMAIL` + `ADMIN_PASSWORD` (so sánh chuỗi, vì là Phase 0 / local dev).
+- Sau `signIn` thành công: set cookie `session` = `<payload>.<sig>` với `payload = base64url({sub: ADMIN_EMAIL, exp: now+SESSION_TTL})`, `sig = HMAC-SHA256(payload, SESSION_SECRET)`. HttpOnly, SameSite=Lax, Secure trong production.
+- `getCurrentUser`: parse + verify HMAC + check exp.
+- `middleware`: gate `/admin/*` (trừ `/admin/login`) bằng cách check cookie; redirect khi fail.
+- Toàn bộ HMAC dùng Web Crypto (Edge compatible).
+ 
+---
+ 
+## 13. Supabase adapter
+ 
+- `clients.ts` cung cấp `getServerClient()` (đọc cookie qua `@supabase/ssr`) và `getServiceClient()` (service role, dùng cho insert/admin queries).
+- `data-store.ts`: dùng service client, query tables như local.
+- `blob-store.ts`: upload vào bucket `skin-images` (private). `signedUrl` dùng `createSignedUrl`.
+- `auth.ts`: `signIn` qua `signInWithPassword`, `middleware` refresh session theo pattern chính thức của `@supabase/ssr`.
+ 
+---
+ 
+## 14. Email (`src/lib/email/resend.ts`)
+ 
+- Nếu `RESEND_API_KEY` không set → no-op, log một dòng và return.
+- Có set → gửi email "Báo cáo của bạn đã sẵn sàng" với link `NEXT_PUBLIC_APP_URL/report/<token>`. `from` = `RESEND_FROM_EMAIL`.
+ 
+---
+ 
+## 15. Env vars
+ 
+`.env.example` phải có comment đầy đủ, chia section: Backend selection, App + AI provider, BACKEND=local, BACKEND=supabase, Email. Bao gồm:
+ 
+```
+BACKEND=local
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+SKIN_AI_PROVIDER=mock
+ANTHROPIC_API_KEY=
+CLAUDE_MODEL=claude-opus-4-7
+ 
+# local
+DATABASE_URL=postgresql://skinai:skinai@localhost:5432/skinai
+LOCAL_STORAGE_DIR=.local-storage
+LOCAL_STORAGE_SECRET=change-me-local-storage-secret
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=admin
+SESSION_SECRET=change-me-session-secret
+SESSION_TTL=28800
+SIGNED_URL_TTL=600
+IP_HASH_PEPPER=change-me-ip-pepper
+ 
+# supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_STORAGE_BUCKET=skin-images
+ 
+# email
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=SkinAI Lab <noreply@example.com>
+```
+ 
+---
+ 
+## 16. Bảo mật & privacy (bắt buộc)
+ 
+- Public report URL chỉ chứa token, **không bao giờ chứa submission id**.
+- Revoke report = set `reports.revoked_at`, trang trả 404 ngay.
+- IP người dùng được hash SHA-256 với `IP_HASH_PEPPER` trước khi lưu vào `submissions.ip_hash`. Raw IP không persist.
+- Ảnh không public: local dùng signed URL ngắn hạn qua `/api/files`; Supabase bucket private + signed URL.
+- Local BlobStore refuse path traversal.
+- Supabase: RLS bật, không policy cho anon/authenticated → client trực tiếp không đọc được.
+- Phase 0 admin auth là một tài khoản env-credentialed: chỉ dùng cho dev/MVP. Production switch sang Supabase Auth hoặc adapter thứ 3.
+- HMAC cookies + signed URL dùng Web Crypto API để cùng code chạy trên Node + Edge.
+ 
+---
+ 
+## 17. UI/UX yêu cầu
+ 
+- Toàn bộ text user-facing: **tiếng Việt**.
+- Mỗi page hiển thị disclaimer ở footer (component `disclaimer.tsx`).
+- Admin pages có header riêng với nút logout.
+- Form `/submit` UX:
+  - Mỗi ảnh có preview ngay sau khi chọn.
+  - Nếu validator fail: hiện message đỏ + icon, không clear file (cho user thấy ảnh đã chọn).
+  - Submit button disable khi đang validate / đang upload.
+  - Sau khi submit thành công: hiển thị loading "Đang phân tích..." rồi redirect.
+- Report page: bar/list scores với màu theo band (high=xanh, medium=vàng, low=đỏ), overall score lớn ở đầu.
+- Admin list: badge màu theo status, search debounced, pagination đơn giản.
+ 
+---
+ 
+## 18. Quality bar khi build
+ 
+- TypeScript strict, không `any` trừ khi thực sự cần (và comment lý do).
+- Mọi route handler validate input bằng zod, trả lỗi 400 có message rõ.
+- Mọi truy cập backend đi qua adapter — không import `pg` hay `supabase-js` trực tiếp từ page/route.
+- Middleware không được import bất cứ gì kéo theo `pg` (sẽ làm vỡ Edge runtime).
+- README.md đầy đủ: setup local, switch Supabase, project layout, scripts, security notes.
+- Không thêm test framework / CI cho Phase 0 (out of scope).
+- Không tạo file documentation phụ ngoài README.md trừ khi cần.
+ 
+---
+ 
+## 19. Trình tự build đề xuất
+ 
+1. Khởi tạo Next.js 15 + TS + Tailwind + UI primitives.
+2. `db/schema.sql`, `docker-compose.yml`, `scripts/db-setup.mjs`.
+3. `src/lib/backend/types.ts` + local adapter (postgres + filesystem + cookie auth) + factory tách biệt.
+4. `src/lib/constants.ts`, `validation.ts`, `tokens.ts`, `utils.ts`.
+5. `src/lib/ai/` (types + normalize + mock).
+6. `src/lib/image-validators/` (Tier 1 trước, Tier 2 face sau).
+7. Public pages: `/`, `/submit`, `/report/[token]` + `POST /api/submit` + `/api/files`.
+8. Admin: auth pages + middleware + list + detail + status/notes/CSV/image-url APIs.
+9. Claude provider + email.
+10. Supabase adapter + migration.
+11. README + `.env.example`.
+ 
+---
+ 
+## 20. Checklist hoàn thành
+ 
+- [ ] `npm run dev` chạy được với `BACKEND=local`, `SKIN_AI_PROVIDER=mock`, không cần Anthropic key, không cần Supabase.
+- [ ] Submit 3 ảnh hợp lệ → redirect report → thấy scores deterministic.
+- [ ] Submit ảnh mờ/quá tối/không có mặt → bị chặn ở client với message tiếng Việt cụ thể.
+- [ ] Login admin → thấy list → mở detail → đổi status → add note → export CSV.
+- [ ] `npm run typecheck` và `npm run lint` sạch.
+- [ ] Set `SKIN_AI_PROVIDER=claude` + `ANTHROPIC_API_KEY` → submit chạy thật, raw có usage tokens.
+- [ ] Set `BACKEND=supabase` + chạy migration → toàn bộ flow lại hoạt động, không sửa code app.
+ 
+Bắt đầu build.
+ 

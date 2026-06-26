@@ -137,6 +137,12 @@ export async function POST(req: NextRequest) {
         left: analysisImages.left!,
         right: analysisImages.right!,
       },
+      context: {
+        concerns: input.skin_concerns,
+        notes: input.notes_from_user || undefined,
+        age: input.age,
+        gender: input.gender,
+      },
     });
     const normalized = normalize(raw);
 

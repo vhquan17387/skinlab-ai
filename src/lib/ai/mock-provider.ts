@@ -59,6 +59,39 @@ export class MockSkinAnalysisProvider implements SkinAnalysisProvider {
       signals,
       summary:
         "[MOCK] Đây là dữ liệu mẫu, không phải phân tích ảnh thật. Da nhìn chung ở mức ổn, tập trung kiểm soát dầu vùng chữ T và dưỡng ẩm đều.",
+      primaryConcerns: [
+        {
+          key: "oiliness",
+          label: "Da dầu vùng chữ T",
+          why: "[MOCK] Trán và mũi bóng dầu rõ nhất, là nguyên nhân chính gây bí lỗ chân lông.",
+        },
+        {
+          key: "pores",
+          label: "Lỗ chân lông to",
+          why: "[MOCK] Lỗ chân lông hai bên cánh mũi to vừa, đi kèm tình trạng dầu.",
+        },
+      ],
+      routine: {
+        morning: [
+          { step: "[MOCK] Sữa rửa mặt dịu nhẹ", ingredients: ["Glycerin"], note: "Rửa nhẹ, nước ấm." },
+          { step: "[MOCK] Serum kiểm soát dầu", ingredients: ["Niacinamide"], note: "Giúp giảm bóng dầu, se lỗ chân lông." },
+          { step: "[MOCK] Kem chống nắng", ingredients: ["SPF 30+"], note: "Bắt buộc mỗi sáng." },
+        ],
+        evening: [
+          { step: "[MOCK] Tẩy trang + rửa mặt", note: "Làm sạch sâu cuối ngày." },
+          { step: "[MOCK] Tẩy tế bào chết hóa học", ingredients: ["BHA"], note: "2-3 lần/tuần, tăng dần." },
+          { step: "[MOCK] Kem dưỡng ẩm nhẹ", ingredients: ["Hyaluronic Acid"], note: "Kết cấu mỏng, không bí." },
+        ],
+        weekly: [
+          { step: "[MOCK] Mặt nạ đất sét", ingredients: ["Kaolin"], note: "1 lần/tuần cho vùng chữ T." },
+        ],
+      },
+      expectations:
+        "[MOCK] Thường sau 4-6 tuần dùng đều sẽ thấy da bớt bóng dầu và lỗ chân lông thông thoáng hơn.",
+      seeDoctorIf: [
+        "[MOCK] Mụn viêm sưng đau, lan rộng hoặc để lại sẹo.",
+        "[MOCK] Da kích ứng kéo dài sau khi dùng sản phẩm mới.",
+      ],
       recommendations: [
         "[MOCK] Làm sạch dịu nhẹ 2 lần/ngày, tránh chà xát mạnh.",
         "[MOCK] Dùng kem dưỡng ẩm phù hợp, ưu tiên kết cấu nhẹ cho vùng chữ T.",

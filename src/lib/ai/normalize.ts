@@ -47,5 +47,9 @@ export function normalize(
     bandLabel: bandOf(overall),
     summary: raw.summary,
     recommendations: raw.recommendations,
+    primaryConcerns: raw.primaryConcerns,
+    routine: raw.routine,
+    expectations: raw.expectations,
+    seeDoctorIf: raw.seeDoctorIf,
   };
 }

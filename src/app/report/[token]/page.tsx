@@ -112,6 +112,28 @@ export default async function ReportPage({
           </Card>
         )}
 
+        {/* Vấn đề ưu tiên */}
+        {normalized.primaryConcerns && normalized.primaryConcerns.length > 0 && (
+          <Card className="mt-6 border-primary/40">
+            <CardHeader>
+              <CardTitle>Vấn đề nên ưu tiên</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {normalized.primaryConcerns.map((c, i) => (
+                <div key={c.key || i} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">{c.label}</p>
+                    <p className="text-sm text-foreground/80">{c.why}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Scores */}
         <Card className="mt-6">
           <CardHeader>
@@ -148,11 +170,93 @@ export default async function ReportPage({
           </CardContent>
         </Card>
 
-        {/* Gợi ý chăm sóc */}
+        {/* Lộ trình chăm sóc */}
+        {normalized.routine && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Lộ trình chăm sóc gợi ý</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {(
+                [
+                  ["Buổi sáng", normalized.routine.morning],
+                  ["Buổi tối", normalized.routine.evening],
+                  ["Hằng tuần", normalized.routine.weekly],
+                ] as const
+              ).map(([title, steps]) =>
+                steps && steps.length > 0 ? (
+                  <div key={title}>
+                    <p className="mb-2 text-sm font-semibold">{title}</p>
+                    <ol className="space-y-2">
+                      {steps.map((s, i) => (
+                        <li key={i} className="text-sm">
+                          <span className="font-medium">{s.step}</span>
+                          {s.ingredients && s.ingredients.length > 0 && (
+                            <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+                              {s.ingredients.map((ing) => (
+                                <span
+                                  key={ing}
+                                  className="rounded bg-secondary px-1.5 py-0.5 text-xs text-foreground/80"
+                                >
+                                  {ing}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                          {s.note && (
+                            <span className="block text-xs text-muted-foreground">
+                              {s.note}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : null,
+              )}
+              <p className="text-xs text-muted-foreground">
+                Gợi ý theo nhóm hoạt chất, không phải thương hiệu cụ thể. Hãy thử
+                từng sản phẩm mới một và ngưng nếu da kích ứng.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Kỳ vọng cải thiện */}
+        {normalized.expectations && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Kỳ vọng cải thiện</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-relaxed text-foreground/90">
+                {normalized.expectations}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Khi nào nên gặp bác sĩ */}
+        {normalized.seeDoctorIf && normalized.seeDoctorIf.length > 0 && (
+          <Card className="mt-6 border-amber-300">
+            <CardHeader>
+              <CardTitle>Khi nào nên gặp bác sĩ da liễu</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="list-disc space-y-1.5 pl-5 text-sm text-foreground/90">
+                {normalized.seeDoctorIf.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Gợi ý chăm sóc bổ sung */}
         {normalized.recommendations && normalized.recommendations.length > 0 && (
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Gợi ý chăm sóc</CardTitle>
+              <CardTitle>Gợi ý bổ sung</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="list-disc space-y-1.5 pl-5 text-sm text-foreground/90">

@@ -13,6 +13,7 @@ import {
   SKIN_CONCERN_OPTIONS,
   IMAGE_KINDS,
   IMAGE_KIND_LABEL_VI,
+  IMAGE_KIND_HINT_VI,
   ACCEPTED_MIME,
   MAX_IMAGE_BYTES,
   type ImageKind,
@@ -20,7 +21,7 @@ import {
 import {
   createImageContext,
   runValidators,
-  DEFAULT_VALIDATORS,
+  validatorsForKind,
 } from "@/lib/image-validators";
 
 interface ImageState {
@@ -90,7 +91,7 @@ export function SubmitForm() {
 
     try {
       const ctx = await createImageContext(file, kind);
-      const result = await runValidators(ctx, DEFAULT_VALIDATORS);
+      const result = await runValidators(ctx, validatorsForKind(kind));
       ctx.bitmap.close?.();
       if (result.ok) {
         setImages((p) => ({
@@ -237,7 +238,10 @@ export function SubmitForm() {
 
       {/* Images */}
       <section className="space-y-3">
-        <h2 className="font-semibold">3 ảnh khuôn mặt</h2>
+        <h2 className="font-semibold">Ảnh phân tích da</h2>
+        <p className="text-sm text-muted-foreground">
+          1 ảnh khuôn mặt chính diện và 2 ảnh cận cảnh vùng da cần phân tích.
+        </p>
         <div className="grid gap-4 sm:grid-cols-3">
           {IMAGE_KINDS.map((kind) => (
             <ImageUploader
@@ -255,7 +259,7 @@ export function SubmitForm() {
         <h2 className="font-semibold">Đồng ý</h2>
         <Consent name="consent_terms" label="Tôi đồng ý với điều khoản sử dụng dịch vụ." />
         <Consent name="consent_data" label="Tôi đồng ý cho hệ thống xử lý dữ liệu cá nhân của tôi." />
-        <Consent name="consent_images" label="Tôi đồng ý cung cấp hình ảnh khuôn mặt để phân tích." />
+        <Consent name="consent_images" label="Tôi đồng ý cung cấp hình ảnh khuôn mặt/vùng da để phân tích." />
       </section>
 
       {formError && (
@@ -316,6 +320,7 @@ function ImageUploader({
   return (
     <div className="space-y-2">
       <Label>{IMAGE_KIND_LABEL_VI[kind]}</Label>
+      <p className="text-xs text-muted-foreground">{IMAGE_KIND_HINT_VI[kind]}</p>
       <label
         htmlFor={inputId}
         className="flex aspect-square cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-input bg-secondary/40 hover:bg-secondary"

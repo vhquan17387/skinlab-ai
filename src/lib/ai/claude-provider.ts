@@ -10,9 +10,9 @@ import type {
 // (claude-sonnet-4-6 ~2x cheaper, claude-haiku-4-5 ~5x cheaper).
 const DEFAULT_MODEL = "claude-opus-4-7";
 
-const SYSTEM_PROMPT = `Bạn là một trợ lý phân tích hình ảnh da mặt cho mục đích tham khảo về chăm sóc da (KHÔNG phải chẩn đoán y khoa).
-Bạn nhận 3 ảnh khuôn mặt: chính diện, nghiêng trái, nghiêng phải.
-Hãy đánh giá các trục da sau, trả về điểm số nguyên theo thang đo, VÀ với mỗi trục bắt buộc nêu "rationale".
+const SYSTEM_PROMPT = `Bạn là một trợ lý phân tích hình ảnh da cho mục đích tham khảo về chăm sóc da (KHÔNG phải chẩn đoán y khoa).
+Bạn nhận 3 ảnh: (1) ảnh khuôn mặt chính diện, (2) và (3) ảnh cận cảnh vùng da cần phân tích (có thể là vùng da bị tổn thương, không nhất thiết là toàn khuôn mặt).
+Hãy kết hợp cả 3 ảnh để đánh giá các trục da sau, trả về điểm số nguyên theo thang đo, VÀ với mỗi trục bắt buộc nêu "rationale".
 
 Quy ước trục (axis):
 - "severity": 0 = không có vấn đề, càng cao càng nghiêm trọng (thang 0-10).
@@ -114,7 +114,7 @@ export class ClaudeSkinAnalysisProvider implements SkinAnalysisProvider {
         {
           role: "user",
           content: [
-            { type: "text", text: "Ảnh chính diện:" },
+            { type: "text", text: "Ảnh khuôn mặt chính diện:" },
             {
               type: "image",
               source: {
@@ -123,7 +123,7 @@ export class ClaudeSkinAnalysisProvider implements SkinAnalysisProvider {
                 data: toBase64(front.bytes),
               },
             },
-            { type: "text", text: "Ảnh nghiêng trái:" },
+            { type: "text", text: "Ảnh cận cảnh vùng da 1:" },
             {
               type: "image",
               source: {
@@ -132,7 +132,7 @@ export class ClaudeSkinAnalysisProvider implements SkinAnalysisProvider {
                 data: toBase64(left.bytes),
               },
             },
-            { type: "text", text: "Ảnh nghiêng phải:" },
+            { type: "text", text: "Ảnh cận cảnh vùng da 2:" },
             {
               type: "image",
               source: {

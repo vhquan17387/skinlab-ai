@@ -10,6 +10,7 @@ export enum ValidationCode {
   NO_FACE = "no_face",
   FACE_TOO_SMALL = "face_too_small",
   WRONG_ANGLE = "wrong_angle",
+  NOT_SKIN = "not_skin",
   INTERNAL_ERROR = "internal_error",
 }
 

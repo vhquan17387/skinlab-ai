@@ -10,8 +10,9 @@ export default function SubmitPage() {
       <main className="mx-auto max-w-2xl px-4 py-10">
         <h1 className="text-2xl font-bold">Nộp ảnh để phân tích da</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Vui lòng điền thông tin và tải lên 3 ảnh khuôn mặt rõ nét. Ảnh sẽ được
-          kiểm tra chất lượng ngay trên trình duyệt trước khi gửi.
+          Vui lòng điền thông tin và tải lên 1 ảnh khuôn mặt chính diện cùng 2 ảnh
+          cận cảnh vùng da rõ nét. Ảnh sẽ được kiểm tra chất lượng ngay trên trình
+          duyệt trước khi gửi.
         </p>
         <div className="mt-6">
           <SubmitForm />

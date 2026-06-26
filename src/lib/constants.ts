@@ -62,9 +62,16 @@ export const IMAGE_KINDS = ["front", "left", "right"] as const;
 export type ImageKind = (typeof IMAGE_KINDS)[number];
 
 export const IMAGE_KIND_LABEL_VI: Record<ImageKind, string> = {
-  front: "Chính diện",
-  left: "Nghiêng trái",
-  right: "Nghiêng phải",
+  front: "Khuôn mặt chính diện",
+  left: "Vùng da 1",
+  right: "Vùng da 2",
+};
+
+// Gợi ý dưới mỗi ô upload ảnh.
+export const IMAGE_KIND_HINT_VI: Record<ImageKind, string> = {
+  front: "Chụp rõ toàn khuôn mặt, chính diện.",
+  left: "Chụp cận cảnh vùng da cần phân tích (mặt hoặc vùng da bị tổn thương).",
+  right: "Chụp cận cảnh một vùng da khác (hoặc cùng vùng ở góc khác).",
 };
 
 export const SIGNED_URL_TTL = Number(process.env.SIGNED_URL_TTL || 600);

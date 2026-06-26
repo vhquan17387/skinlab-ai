@@ -18,8 +18,8 @@ export default function LandingPage() {
             Hiểu làn da của bạn rõ hơn
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            Tải lên 3 ảnh khuôn mặt và nhận báo cáo phân tích da chi tiết, mang
-            tính tham khảo cho việc chăm sóc da hằng ngày.
+            Tải lên ảnh khuôn mặt và vùng da cần phân tích, nhận báo cáo chi tiết
+            mang tính tham khảo cho việc chăm sóc da hằng ngày.
           </p>
           <div className="mt-8">
             <Link href="/submit" className={buttonVariants({ size: "lg" })}>
@@ -31,8 +31,8 @@ export default function LandingPage() {
         <section className="grid gap-4 pb-16 sm:grid-cols-3">
           <Feature
             icon={<Camera className="h-6 w-6 text-primary" />}
-            title="3 ảnh khuôn mặt"
-            desc="Chính diện, nghiêng trái, nghiêng phải — kiểm tra chất lượng ảnh ngay trên trình duyệt."
+            title="Ảnh mặt + vùng da"
+            desc="1 ảnh khuôn mặt chính diện và 2 ảnh cận cảnh vùng da — kiểm tra chất lượng ảnh ngay trên trình duyệt."
           />
           <Feature
             icon={<Sparkles className="h-6 w-6 text-primary" />}

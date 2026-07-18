@@ -13,7 +13,9 @@ const MODEL_URL =
 
 let landmarkerPromise: Promise<FaceLandmarker> | null = null;
 
-async function getLandmarker(): Promise<FaceLandmarker> {
+// Exported so the scan pipeline can reuse the same (lazily-loaded) model instead
+// of downloading a second copy.
+export async function getLandmarker(): Promise<FaceLandmarker> {
   if (!landmarkerPromise) {
     landmarkerPromise = (async () => {
       const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);

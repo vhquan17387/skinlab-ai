@@ -14,7 +14,30 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { decompose, ALL_LAYER_KEYS } from "@/lib/imaging/decompose";
-import type { CaptureSet, IlluminationKey, LayerKey, DecomposeResult } from "@/lib/imaging/types";
+import {
+  detectLandmarks,
+  buildFaceMask,
+  estimateAffine,
+  warpToReference,
+} from "@/lib/imaging/facemesh";
+import type {
+  CaptureSet,
+  FrameLike,
+  IlluminationKey,
+  LayerKey,
+  DecomposeResult,
+} from "@/lib/imaging/types";
+
+// Wrap a frame in an offscreen canvas so MediaPipe / warp can consume it.
+function toCanvas(img: FrameLike): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = img.width;
+  c.height = img.height;
+  const id = new ImageData(img.width, img.height);
+  id.data.set(img.data);
+  c.getContext("2d")!.putImageData(id, 0, 0);
+  return c;
+}
 
 const PROC_WIDTH = 480; // downscale width for processing (speed)
 
@@ -74,6 +97,7 @@ export function ScanClient() {
   const whiteFrameRef = useRef<ImageData | null>(null);
   const [active, setActive] = useState<LayerKey | "original">("original");
   const [coverages, setCoverages] = useState<Record<string, number> | null>(null);
+  const [faceFound, setFaceFound] = useState(true);
 
   // -------- camera lifecycle --------
   const startCamera = useCallback(async () => {
@@ -184,7 +208,31 @@ export function ScanClient() {
     setPhase("processing");
     await nextFrame();
     try {
-      const result = decompose(set);
+      const white = set.white;
+      if (!white) throw new Error("no white frame");
+      const w = white.width;
+      const h = white.height;
+
+      // 1. Locate the face on the white frame → real skin mask + reference
+      //    landmarks for aligning the coloured frames.
+      const whiteLm = await detectLandmarks(toCanvas(white), w, h);
+      let mask: Uint8Array | undefined;
+      if (whiteLm) {
+        mask = buildFaceMask(whiteLm, w, h);
+        // 2. Warp each coloured frame onto the white frame. If its face can't be
+        //    found, drop the band so decompose falls back to the white channel.
+        for (const band of ["red", "green", "blue"] as IlluminationKey[]) {
+          const frame = set[band];
+          if (!frame) continue;
+          const lm = await detectLandmarks(toCanvas(frame), w, h);
+          const af = lm ? estimateAffine(lm, whiteLm) : null;
+          if (af) set[band] = warpToReference(toCanvas(frame), af, w, h);
+          else delete set[band];
+        }
+      }
+      setFaceFound(!!whiteLm);
+
+      const result = decompose(set, mask ? { mask } : {});
       resultRef.current = result;
       const cov: Record<string, number> = {};
       for (const k of ALL_LAYER_KEYS) cov[k] = result.layers[k].coverage;
@@ -319,6 +367,12 @@ export function ScanClient() {
       {/* Results */}
       {phase === "done" && (
         <div className="space-y-4">
+          {!faceFound && (
+            <p className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-800">
+              Không nhận diện được khuôn mặt rõ ràng — vùng phân tích có thể chưa chuẩn.
+              Thử lại: đưa mặt vào giữa khung, đủ sáng, chính diện.
+            </p>
+          )}
           <canvas
             ref={viewCanvasRef}
             className="mx-auto w-full max-w-sm rounded-xl border"

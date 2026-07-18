@@ -259,6 +259,10 @@ export interface DecomposeOptions {
   // Fraction of the smaller image dimension used as the "neighbourhood" radius
   // for local-contrast layers. Larger = coarser blobs.
   baseRadiusFrac?: number;
+  // Precomputed skin mask (1 = analyse, 0 = ignore), typically from MediaPipe
+  // face landmarks. When provided it replaces the crude RGB colour heuristic, so
+  // overlays stay on facial skin instead of hair/background/eyes/lips.
+  mask?: Uint8Array;
 }
 
 export function decompose(set: CaptureSet, opts: DecomposeOptions = {}): DecomposeResult {
@@ -286,7 +290,18 @@ export function decompose(set: CaptureSet, opts: DecomposeOptions = {}): Decompo
     lum[i] = (Rr[i] + Rg[i] + Rb[i]) / 3;
   }
 
-  const { mask, count: skinCount } = skinMask(base, n);
+  let mask: Uint8Array;
+  let skinCount: number;
+  if (opts.mask && opts.mask.length === n) {
+    mask = opts.mask;
+    let c = 0;
+    for (let i = 0; i < n; i++) if (mask[i]) c++;
+    skinCount = c;
+  } else {
+    const m = skinMask(base, n);
+    mask = m.mask;
+    skinCount = m.count;
+  }
 
   // Layer maps.
   const brownMap = localExcess(melanin, w, h, R);

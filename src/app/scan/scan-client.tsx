@@ -27,14 +27,21 @@ import type {
   LayerKey,
   DecomposeResult,
 } from "@/lib/imaging/types";
-import type { PrimaryConcern, SkinPlan } from "@/lib/ai/types";
+interface Metric {
+  key: string;
+  label: string;
+  measurable: boolean;
+  score: number; // 0..10
+  assessment: string;
+}
 
 interface AnalysisResult {
   model?: string;
-  summary?: string;
-  primaryConcerns: PrimaryConcern[];
-  routine: SkinPlan | null;
-  expectations?: string;
+  metrics: Metric[];
+  overall: number; // 0..10
+  overallLabel?: string;
+  groups: { best: string[]; moderate: string[]; needsAttention: string[] };
+  skinAge: { low: number; high: number; center: number; reasons: string[] };
   recommendations: string[];
 }
 
@@ -529,81 +536,82 @@ function AnalysisPanel({
   }
   if (!analysis) return null;
 
-  const { summary, primaryConcerns, routine, expectations, recommendations } = analysis;
+  const { metrics, overall, overallLabel, groups, skinAge, recommendations } = analysis;
+  const scoreColor = (s: number) =>
+    s >= 8 ? "text-green-600" : s >= 6.5 ? "text-amber-600" : "text-red-600";
+
   return (
     <div className="space-y-4 rounded-lg border p-4">
-      <p className="text-sm font-semibold">Phân tích AI</p>
+      <p className="text-sm font-semibold">Đánh giá AI (thang 10)</p>
 
-      {summary && <p className="text-sm leading-relaxed text-foreground/90">{summary}</p>}
+      {/* Overall */}
+      <div className="flex flex-col items-center gap-1 rounded-md bg-secondary/40 py-4">
+        <span className="text-xs text-muted-foreground">Điểm tổng thể</span>
+        <span className={`text-4xl font-bold ${scoreColor(overall)}`}>
+          {overall.toFixed(1)}
+          <span className="text-lg font-medium text-muted-foreground">/10</span>
+        </span>
+        {overallLabel && <span className="text-sm">{overallLabel}</span>}
+      </div>
 
-      {primaryConcerns.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Vấn đề nên ưu tiên</p>
-          {primaryConcerns.map((c, i) => (
-            <div key={c.key || i} className="flex gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-                {i + 1}
-              </span>
-              <div>
-                <p className="text-sm font-medium">{c.label}</p>
-                <p className="text-sm text-foreground/80">{c.why}</p>
-              </div>
+      {/* Per-metric scores */}
+      <div className="space-y-2.5">
+        {metrics.map((m) => (
+          <div key={m.key}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-medium">{m.label}</span>
+              {m.measurable ? (
+                <span className={`text-sm font-semibold ${scoreColor(m.score)}`}>
+                  {m.score.toFixed(1)}/10
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">Không đo được</span>
+              )}
             </div>
-          ))}
-        </div>
-      )}
-
-      {routine && (
-        <div className="space-y-3">
-          <p className="text-sm font-medium">Lộ trình chăm sóc</p>
-          {(
-            [
-              ["Buổi sáng", routine.morning],
-              ["Buổi tối", routine.evening],
-              ["Hằng tuần", routine.weekly],
-            ] as const
-          ).map(([title, steps]) =>
-            steps && steps.length > 0 ? (
-              <div key={title}>
-                <p className="mb-1 text-xs font-semibold text-muted-foreground">{title}</p>
-                <ol className="space-y-1.5">
-                  {steps.map((s, i) => (
-                    <li key={i} className="text-sm">
-                      <span className="font-medium">{s.step}</span>
-                      {s.ingredients && s.ingredients.length > 0 && (
-                        <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
-                          {s.ingredients.map((ing) => (
-                            <span
-                              key={ing}
-                              className="rounded bg-secondary px-1.5 py-0.5 text-xs text-foreground/80"
-                            >
-                              {ing}
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                      {s.note && (
-                        <span className="block text-xs text-muted-foreground">{s.note}</span>
-                      )}
-                    </li>
-                  ))}
-                </ol>
+            {m.measurable && (
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className={
+                    "h-full rounded-full " +
+                    (m.score >= 8 ? "bg-green-500" : m.score >= 6.5 ? "bg-amber-500" : "bg-red-500")
+                  }
+                  style={{ width: `${Math.max(0, Math.min(10, m.score)) * 10}%` }}
+                />
               </div>
-            ) : null,
-          )}
-        </div>
-      )}
+            )}
+            <p className="mt-0.5 text-xs text-foreground/75">{m.assessment}</p>
+          </div>
+        ))}
+      </div>
 
-      {expectations && (
-        <div>
-          <p className="text-sm font-medium">Kỳ vọng cải thiện</p>
-          <p className="text-sm text-foreground/80">{expectations}</p>
-        </div>
-      )}
+      {/* Groups */}
+      <div className="grid gap-2 sm:grid-cols-3">
+        <GroupBox title="Tốt nhất" items={groups.best} tone="green" />
+        <GroupBox title="Mức khá" items={groups.moderate} tone="amber" />
+        <GroupBox title="Cần lưu ý" items={groups.needsAttention} tone="red" />
+      </div>
+
+      {/* Skin age */}
+      <div className="rounded-md border border-primary/30 p-3">
+        <p className="text-sm font-medium">
+          Tuổi da ước lượng:{" "}
+          <span className="font-semibold">
+            {skinAge.low}–{skinAge.high} tuổi
+          </span>{" "}
+          <span className="text-muted-foreground">(trung tâm ~{skinAge.center})</span>
+        </p>
+        {skinAge.reasons.length > 0 && (
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs text-foreground/75">
+            {skinAge.reasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {recommendations.length > 0 && (
         <div>
-          <p className="text-sm font-medium">Gợi ý bổ sung</p>
+          <p className="text-sm font-medium">Gợi ý chăm sóc</p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-foreground/80">
             {recommendations.map((r, i) => (
               <li key={i}>{r}</li>
@@ -613,9 +621,36 @@ function AnalysisPanel({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Gợi ý theo nhóm hoạt chất, không phải thương hiệu. Chỉ mang tính tham khảo, không thay
-        thế bác sĩ da liễu.
+        KHÔNG phải điểm VISIA thật, không thay khám da liễu. Ánh sáng, góc chụp, trang điểm và
+        xử lý ảnh có thể làm da trông khác thực tế.
       </p>
+    </div>
+  );
+}
+
+function GroupBox({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: "green" | "amber" | "red";
+}) {
+  const border =
+    tone === "green" ? "border-green-300" : tone === "amber" ? "border-amber-300" : "border-red-300";
+  return (
+    <div className={`rounded-md border ${border} p-2`}>
+      <p className="text-xs font-semibold">{title}</p>
+      {items.length > 0 ? (
+        <ul className="mt-1 space-y-0.5 text-xs text-foreground/75">
+          {items.map((it, i) => (
+            <li key={i}>{it}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-xs text-muted-foreground">—</p>
+      )}
     </div>
   );
 }

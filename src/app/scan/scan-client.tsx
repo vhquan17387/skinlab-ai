@@ -27,6 +27,16 @@ import type {
   LayerKey,
   DecomposeResult,
 } from "@/lib/imaging/types";
+import type { PrimaryConcern, SkinPlan } from "@/lib/ai/types";
+
+interface AnalysisResult {
+  model?: string;
+  summary?: string;
+  primaryConcerns: PrimaryConcern[];
+  routine: SkinPlan | null;
+  expectations?: string;
+  recommendations: string[];
+}
 
 // Wrap a frame in an offscreen canvas so MediaPipe / warp can consume it.
 function toCanvas(img: FrameLike): HTMLCanvasElement {
@@ -98,6 +108,10 @@ export function ScanClient() {
   const [active, setActive] = useState<LayerKey | "original">("original");
   const [coverages, setCoverages] = useState<Record<string, number> | null>(null);
   const [faceFound, setFaceFound] = useState(true);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   // -------- camera lifecycle --------
   const startCamera = useCallback(async () => {
@@ -133,6 +147,13 @@ export function ScanClient() {
       } catch {
         /* not supported — software normalisation compensates */
       }
+      // Keep the screen awake so it doesn't dim mid-scan (weaker light = worse
+      // reflectance). Best-effort; unsupported on some browsers.
+      try {
+        wakeLockRef.current = await navigator.wakeLock?.request("screen");
+      } catch {
+        /* ignore */
+      }
       setPhase("ready");
     } catch (e) {
       setError(
@@ -145,6 +166,8 @@ export function ScanClient() {
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    wakeLockRef.current?.release().catch(() => {});
+    wakeLockRef.current = null;
   }, []);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
@@ -186,9 +209,46 @@ export function ScanClient() {
     return () => clearInterval(id);
   }, [phase, checkAmbient]);
 
+  // -------- AI analysis (Anthropic via /api/scan-analyze) --------
+  const analyzeWithAI = useCallback(
+    async (white: FrameLike, cov: Record<string, number>) => {
+      setAnalyzing(true);
+      setAnalyzeError(null);
+      setAnalysis(null);
+      try {
+        const canvas = toCanvas(white);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const imageBase64 = dataUrl.split(",")[1];
+        const res = await fetch("/api/scan-analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64, contentType: "image/jpeg", coverages: cov }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setAnalyzeError(data.error || "Phân tích AI thất bại.");
+        } else {
+          setAnalysis(data as AnalysisResult);
+        }
+      } catch {
+        setAnalyzeError("Lỗi kết nối khi phân tích AI.");
+      } finally {
+        setAnalyzing(false);
+      }
+    },
+    [],
+  );
+
   // -------- capture sequence --------
   const runCapture = useCallback(async () => {
     setPhase("capturing");
+    // Fullscreen removes browser chrome so the whole screen emits light during
+    // the colour flashes (brighter, more even illumination on the face).
+    try {
+      await document.documentElement.requestFullscreen?.();
+    } catch {
+      /* ignore */
+    }
     const set: CaptureSet = {};
     for (const step of SEQUENCE) {
       setFlash({ css: step.css, label: step.label });
@@ -204,6 +264,11 @@ export function ScanClient() {
     }
     setFlash(null);
     framesRef.current = set;
+    try {
+      await document.exitFullscreen?.();
+    } catch {
+      /* ignore */
+    }
 
     setPhase("processing");
     await nextFrame();
@@ -239,11 +304,13 @@ export function ScanClient() {
       setCoverages(cov);
       setActive("original");
       setPhase("done");
+      // Kick off the AI interpretation in the background.
+      void analyzeWithAI(white, cov);
     } catch (e) {
       setError("Xử lý ảnh thất bại. Thử chụp lại và giữ máy thật yên.");
       setPhase("error");
     }
-  }, [grabFrame]);
+  }, [grabFrame, analyzeWithAI]);
 
   // -------- render selected layer onto the visible canvas --------
   useEffect(() => {
@@ -279,6 +346,8 @@ export function ScanClient() {
     whiteFrameRef.current = null;
     setCoverages(null);
     setActive("original");
+    setAnalysis(null);
+    setAnalyzeError(null);
     setPhase("ready");
   }, []);
 
@@ -403,6 +472,18 @@ export function ScanClient() {
             % = tỉ lệ vùng da bị ảnh hưởng theo lớp đó (càng thấp càng tốt). Đây là bản thử
             nghiệm — chưa phải chẩn đoán y khoa.
           </p>
+
+          {/* AI interpretation */}
+          <AnalysisPanel
+            analyzing={analyzing}
+            error={analyzeError}
+            analysis={analysis}
+            onRetry={() => {
+              const white = whiteFrameRef.current;
+              if (white && coverages) void analyzeWithAI(white, coverages);
+            }}
+          />
+
           <button
             onClick={restart}
             className="w-full rounded-md border px-4 py-2.5 text-sm font-medium"
@@ -414,6 +495,127 @@ export function ScanClient() {
 
       {/* hidden work canvas */}
       <canvas ref={grabCanvasRef} className="hidden" />
+    </div>
+  );
+}
+
+function AnalysisPanel({
+  analyzing,
+  error,
+  analysis,
+  onRetry,
+}: {
+  analyzing: boolean;
+  error: string | null;
+  analysis: AnalysisResult | null;
+  onRetry: () => void;
+}) {
+  if (analyzing) {
+    return (
+      <div className="rounded-lg border bg-secondary/30 p-4 text-sm text-muted-foreground">
+        Đang phân tích bằng AI…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+        <p className="text-destructive">{error}</p>
+        <button onClick={onRetry} className="mt-2 rounded-md border px-3 py-1.5 text-xs">
+          Thử phân tích lại
+        </button>
+      </div>
+    );
+  }
+  if (!analysis) return null;
+
+  const { summary, primaryConcerns, routine, expectations, recommendations } = analysis;
+  return (
+    <div className="space-y-4 rounded-lg border p-4">
+      <p className="text-sm font-semibold">Phân tích AI</p>
+
+      {summary && <p className="text-sm leading-relaxed text-foreground/90">{summary}</p>}
+
+      {primaryConcerns.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Vấn đề nên ưu tiên</p>
+          {primaryConcerns.map((c, i) => (
+            <div key={c.key || i} className="flex gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                {i + 1}
+              </span>
+              <div>
+                <p className="text-sm font-medium">{c.label}</p>
+                <p className="text-sm text-foreground/80">{c.why}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {routine && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Lộ trình chăm sóc</p>
+          {(
+            [
+              ["Buổi sáng", routine.morning],
+              ["Buổi tối", routine.evening],
+              ["Hằng tuần", routine.weekly],
+            ] as const
+          ).map(([title, steps]) =>
+            steps && steps.length > 0 ? (
+              <div key={title}>
+                <p className="mb-1 text-xs font-semibold text-muted-foreground">{title}</p>
+                <ol className="space-y-1.5">
+                  {steps.map((s, i) => (
+                    <li key={i} className="text-sm">
+                      <span className="font-medium">{s.step}</span>
+                      {s.ingredients && s.ingredients.length > 0 && (
+                        <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+                          {s.ingredients.map((ing) => (
+                            <span
+                              key={ing}
+                              className="rounded bg-secondary px-1.5 py-0.5 text-xs text-foreground/80"
+                            >
+                              {ing}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      {s.note && (
+                        <span className="block text-xs text-muted-foreground">{s.note}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null,
+          )}
+        </div>
+      )}
+
+      {expectations && (
+        <div>
+          <p className="text-sm font-medium">Kỳ vọng cải thiện</p>
+          <p className="text-sm text-foreground/80">{expectations}</p>
+        </div>
+      )}
+
+      {recommendations.length > 0 && (
+        <div>
+          <p className="text-sm font-medium">Gợi ý bổ sung</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-foreground/80">
+            {recommendations.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Gợi ý theo nhóm hoạt chất, không phải thương hiệu. Chỉ mang tính tham khảo, không thay
+        thế bác sĩ da liễu.
+      </p>
     </div>
   );
 }
